@@ -255,6 +255,27 @@ body {
   align-items: center;
   justify-content: center;
   position: relative;
+  border-radius: var(--radius);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+/* Drag-over highlight */
+.photo-area.drag-over {
+  background: rgba(200, 164, 92, 0.06);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.photo-area.drag-over::after {
+  content: '释放以添加照片';
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.78rem;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  z-index: 100;
 }
 
 .photo-stack {

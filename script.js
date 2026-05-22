@@ -94,7 +94,19 @@ function assignScatterPositions(photos) {
 
 function buildAllSections() {
   scrollContainer.innerHTML = '';
-  const names = Object.keys(locations);
+
+  // Merge location names from both locations.json and photosByLocation
+  // so photos with a valid location are never invisible even if
+  // locations.json is empty or out of sync (e.g. fresh Bonto deploy)
+  const locNames = new Set([
+    ...Object.keys(locations),
+    ...Object.keys(photosByLocation).filter(Boolean),
+  ]);
+  const names = [...locNames].sort((a, b) => {
+    const ta = locations[a]?.createdAt || '0';
+    const tb = locations[b]?.createdAt || '0';
+    return tb.localeCompare(ta);
+  });
 
   if (names.length === 0) {
     const empty = document.createElement('div');
@@ -108,12 +120,11 @@ function buildAllSections() {
     names.forEach(name => buildLocationSection(name));
   }
 
-  // Re-observe sections
   setupIntersectionObserver();
   updateNavVisibility();
 }
 
-function buildLocationSection(locName) {
+function buildLocationSection(locName, beforeNode = null) {
   const photos = photosByLocation[locName] || [];
   const loc = locations[locName] || {};
   const desc = loc.description || '';
@@ -153,7 +164,11 @@ function buildLocationSection(locName) {
     photoArea.appendChild(emptyStack);
   }
 
-  scrollContainer.appendChild(section);
+  if (beforeNode) {
+    scrollContainer.insertBefore(section, beforeNode);
+  } else {
+    scrollContainer.appendChild(section);
+  }
 }
 
 // ── Photo Stack ──
@@ -214,9 +229,66 @@ function buildPhotoStack(container, photos, locName) {
 
 function rebuildLocationSection(locName) {
   const old = scrollContainer.querySelector(`.location-section[data-location="${CSS.escape(locName)}"]`);
-  if (old) old.remove();
+  if (!old) return;
+  const nextSibling = old.nextSibling;
+  old.remove();
+  buildLocationSection(locName, nextSibling);
+  setupIntersectionObserver();
+  updateNavVisibility();
+}
+
+// ── Incremental section add / remove (avoids full rebuild) ──
+
+function appendLocationSection(locName, scrollTo = false) {
+  // Remove empty-state if present
+  const empty = scrollContainer.querySelector('.location-section[data-location]');
+  // Only remove actual empty-state sections (no data-location)
+  const allSections = scrollContainer.querySelectorAll('.location-section');
+  // Check if we have a "no locations" placeholder
+  if (allSections.length === 1 && !allSections[0].dataset.location) {
+    allSections[0].remove();
+  }
+
   buildLocationSection(locName);
   setupIntersectionObserver();
+  updateNavVisibility();
+
+  if (scrollTo) {
+    scrollToSection(locName);
+  }
+}
+
+function removeLocationSection(locName) {
+  const section = scrollContainer.querySelector(`.location-section[data-location="${CSS.escape(locName)}"]`);
+  if (section) section.remove();
+  delete locations[locName];
+  delete photosByLocation[locName];
+
+  // If no sections left, rebuild to show empty state
+  const remaining = scrollContainer.querySelectorAll('.location-section[data-location]');
+  if (remaining.length === 0) {
+    buildAllSections();
+  } else {
+    setupIntersectionObserver();
+    updateNavVisibility();
+    // Snap to nearest remaining section
+    requestAnimationFrame(() => {
+      const idx = getCurrentSectionIndex();
+      if (idx >= 0) goToSection(idx);
+    });
+  }
+}
+
+function scrollToSection(locName) {
+  // Wait for layout after DOM insert
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const section = scrollContainer.querySelector(`.location-section[data-location="${CSS.escape(locName)}"]`);
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
 }
 
 // ============================================================
@@ -244,6 +316,27 @@ function goToSection(idx) {
   if (idx < 0 || idx >= sections.length) return;
   sections[idx].scrollIntoView({ behavior: 'smooth' });
 }
+
+// Re-snap on window resize — only if section is significantly misaligned
+let resizeDebounce = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeDebounce);
+  resizeDebounce = setTimeout(() => {
+    const sections = getSections();
+    if (!sections.length) return;
+    const viewTop = scrollContainer.scrollTop;
+    const viewH = scrollContainer.clientHeight;
+    let bestSection = null, bestDist = Infinity;
+    sections.forEach(s => {
+      const dist = Math.abs(s.offsetTop - viewTop);
+      if (dist < bestDist) { bestDist = dist; bestSection = s; }
+    });
+    // Only re-snap if section is more than 30% off-screen
+    if (bestSection && bestDist > viewH * 0.3) {
+      bestSection.scrollIntoView({ behavior: 'instant' });
+    }
+  }, 150);
+});
 
 $('#navPrev').addEventListener('click', () => {
   const idx = getCurrentSectionIndex();
@@ -464,15 +557,12 @@ async function refreshLocation(locName) {
 //  UPLOAD
 // ============================================================
 
-fileInput.addEventListener('change', async () => {
-  if (uploading) return;
-  const files = Array.from(fileInput.files);
-  if (!files.length) return;
-
-  if (!currentLocation) {
-    toastMsg('请先在滚动到某个地点再添加照片');
-    fileInput.value = '';
-    return;
+async function uploadFiles(locationName, files) {
+  if (uploading) return 0;
+  if (!files.length) return 0;
+  if (!locationName) {
+    toastMsg('请先滚动到某个地点再添加照片');
+    return 0;
   }
 
   uploading = true;
@@ -492,7 +582,7 @@ fileInput.addEventListener('change', async () => {
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([{ filename: f.name, data: dataUrl, location: currentLocation }]),
+        body: JSON.stringify([{ filename: f.name, data: dataUrl, location: locationName }]),
       });
       if (!res.ok) throw new Error('服务器错误');
       const result = await res.json();
@@ -503,17 +593,88 @@ fileInput.addEventListener('change', async () => {
     }
   }
 
-  fileInput.value = '';
   uploading = false;
   hideLoading();
 
   if (saved > 0) {
     toastMsg(`已添加 ${saved} 张照片`);
-    await refreshLocation(currentLocation);
-    rebuildLocationSection(currentLocation);
+    await refreshLocation(locationName);
+    rebuildLocationSection(locationName);
   } else {
     toastMsg('上传失败，请重试');
   }
+
+  return saved;
+}
+
+fileInput.addEventListener('change', async () => {
+  const files = Array.from(fileInput.files);
+  fileInput.value = '';
+  if (files.length) await uploadFiles(currentLocation, files);
+});
+
+// ── Drag & Drop to location sections ──
+
+let dragCounter = 0;
+let dragTargetSection = null;
+
+scrollContainer.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  dragCounter++;
+});
+
+scrollContainer.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  if (!e.dataTransfer) return;
+  e.dataTransfer.dropEffect = 'copy';
+
+  // Find which location section the cursor is over
+  const section = e.target.closest('.location-section');
+  const locName = section?.dataset.location;
+  if (!locName) return;
+
+  if (dragTargetSection !== section) {
+    // Remove highlight from previous
+    if (dragTargetSection) {
+      const prevArea = dragTargetSection.querySelector('.photo-area');
+      if (prevArea) prevArea.classList.remove('drag-over');
+    }
+    // Highlight new target
+    dragTargetSection = section;
+    const photoArea = section.querySelector('.photo-area');
+    if (photoArea) photoArea.classList.add('drag-over');
+  }
+});
+
+scrollContainer.addEventListener('dragleave', () => {
+  dragCounter--;
+  if (dragCounter <= 0) {
+    dragCounter = 0;
+    if (dragTargetSection) {
+      const photoArea = dragTargetSection.querySelector('.photo-area');
+      if (photoArea) photoArea.classList.remove('drag-over');
+    }
+    dragTargetSection = null;
+  }
+});
+
+scrollContainer.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  dragCounter = 0;
+  if (dragTargetSection) {
+    const photoArea = dragTargetSection.querySelector('.photo-area');
+    if (photoArea) photoArea.classList.remove('drag-over');
+  }
+
+  const locName = dragTargetSection?.dataset.location;
+  dragTargetSection = null;
+  if (!locName) return;
+
+  const files = e.dataTransfer?.files;
+  if (!files || !files.length) return;
+
+  const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+  if (imageFiles.length) await uploadFiles(locName, imageFiles);
 });
 
 // ============================================================
@@ -595,15 +756,10 @@ $('#btnSaveCreate').addEventListener('click', async () => {
     createLocationModal.classList.remove('open');
     toastMsg('地点已创建');
 
-    // Refresh and rebuild
-    await fetchAllData();
-    buildAllSections();
-
-    // Scroll to the new location
-    setTimeout(() => {
-      const section = scrollContainer.querySelector(`.location-section[data-location="${CSS.escape(name)}"]`);
-      if (section) section.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    // Incremental: add to memory and append one section
+    locations[name] = result;
+    photosByLocation[name] = [];
+    appendLocationSection(name, true);
   } catch (e) {
     console.error(e);
     toastMsg('创建失败');
@@ -624,8 +780,8 @@ scrollContainer.addEventListener('click', async (e) => {
     try {
       await fetch('/api/locations/' + encodeURIComponent(locName), { method: 'DELETE' });
       toastMsg('地点已删除');
-      await fetchAllData();
-      buildAllSections();
+      // Incremental: remove section from DOM and memory
+      removeLocationSection(locName);
     } catch (e) {
       toastMsg('删除失败');
     }
@@ -685,21 +841,31 @@ $('#ctxDelete').addEventListener('click', async () => {
 
 $('#btnSaveEdit').addEventListener('click', async () => {
   const filename = $('#editFilename').value;
-  const location = $('#editLocation').value.trim();
+  const newLocation = $('#editLocation').value.trim();
   const caption = $('#editCaption').value;
   const date = $('#editDate').value;
+
+  // Find old location before update
+  let oldLocation = '';
+  for (const [loc, photos] of Object.entries(photosByLocation)) {
+    if (photos.find(p => p.filename === filename)) { oldLocation = loc; break; }
+  }
+
   try {
     await fetch(`/api/photos/${encodeURIComponent(filename)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ location, caption, date }),
+      body: JSON.stringify({ location: newLocation, caption, date }),
     });
     closeEditModal();
     toastMsg('已更新');
 
-    // Refresh data for all affected locations
-    await fetchAllData();
-    buildAllSections();
+    // Incremental: only refresh affected locations
+    const affected = new Set([oldLocation, newLocation].filter(Boolean));
+    for (const loc of affected) {
+      await refreshLocation(loc);
+      rebuildLocationSection(loc);
+    }
   } catch (e) {
     toastMsg('更新失败');
   }
