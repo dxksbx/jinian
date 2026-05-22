@@ -1,0 +1,9 @@
+{
+  "name": "our-memories",
+  "version": "1.0.0",
+  "description": "A warm, vintage-style photo gallery for cherished memories",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}

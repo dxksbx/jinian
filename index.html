@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>时光相册 · Time Album</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ SCROLL SNAP CONTAINER ═══ -->
+<main class="scroll-container" id="scrollContainer"></main>
+
+<!-- ═══ NAV HOTZONES ═══ -->
+<div class="nav-hotzone nav-zone-top" id="navZoneTop">
+  <button class="nav-arrow nav-arrow-up" id="navPrev" title="上一个地点">
+    <span class="arrow-trail"></span>
+    <span class="arrow-trail"></span>
+    <span class="arrow-trail"></span>
+  </button>
+</div>
+<div class="nav-hotzone nav-zone-bottom" id="navZoneBottom">
+  <button class="nav-arrow nav-arrow-down" id="navNext" title="下一个地点">
+    <span class="arrow-trail"></span>
+    <span class="arrow-trail"></span>
+    <span class="arrow-trail"></span>
+  </button>
+</div>
+
+<!-- ═══ UPLOAD BAR ═══ -->
+<div class="upload-bar">
+  <button class="upload-btn" id="createLocationBtn">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+    </svg>
+    <span>创建地点</span>
+  </button>
+  <label class="upload-btn" for="fileInput" id="uploadLabel">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+    </svg>
+    <span>添加照片</span>
+  </label>
+</div>
+
+<!-- ═══ LIGHTBOX ═══ -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightboxClose">&times;</button>
+  <button class="lightbox-prev" id="lightboxPrev">&#10094;</button>
+  <button class="lightbox-next" id="lightboxNext">&#10095;</button>
+  <div class="lightbox-content">
+    <img id="lightboxImg" src="" alt="">
+    <div class="lightbox-info">
+      <p class="lightbox-caption" id="lightboxCaption"></p>
+      <p class="lightbox-date" id="lightboxDate"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CONTEXT MENU ═══ -->
+<div class="context-menu" id="contextMenu">
+  <button id="ctxEdit">编辑信息</button>
+  <button id="ctxDelete" class="danger">删除照片</button>
+</div>
+
+<!-- ═══ EDIT MODAL ═══ -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3>编辑照片信息</h3>
+    <input type="hidden" id="editFilename">
+    <label for="editLocation">地点</label>
+    <input type="text" id="editLocation" placeholder="比如：大理、东京">
+    <label for="editCaption">描述</label>
+    <textarea id="editCaption" placeholder="写下这一刻的故事…"></textarea>
+    <label for="editDate">日期</label>
+    <input type="text" id="editDate" placeholder="比如：2024年3月15日">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancelEdit">取消</button>
+      <button class="btn-save" id="btnSaveEdit">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CREATE LOCATION MODAL ═══ -->
+<div class="modal-overlay" id="createLocationModal">
+  <div class="modal">
+    <h3>创建地点</h3>
+    <label for="newLocationName">地点名称</label>
+    <input type="text" id="newLocationName" placeholder="比如：大理、东京、巴黎">
+    <label for="newLocationCover">封面图片</label>
+    <div class="cover-picker">
+      <div class="cover-drop" id="coverDrop">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span>点击或拖拽上传封面</span>
+      </div>
+      <input type="file" id="newLocationCover" accept="image/*">
+      <div class="cover-preview" id="coverPreview"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancelCreate">取消</button>
+      <button class="btn-save" id="btnSaveCreate">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CONFIRM DIALOG ═══ -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal modal-sm">
+    <h3 id="confirmTitle">确认操作</h3>
+    <p id="confirmMsg" class="confirm-msg"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancelConfirm">取消</button>
+      <button class="btn-save btn-danger" id="btnOkConfirm">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══ LOADING ═══ -->
+<div class="loading" id="loading"></div>
+
+<input type="file" id="fileInput" accept="image/*" multiple class="sr-only">
+
+<script src="script.js"></script>
+</body>
+</html>

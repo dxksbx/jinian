@@ -1,0 +1,15 @@
+# User data (photos, covers, metadata)
+photos/*
+!photos/.gitkeep
+covers/*
+!covers/.gitkeep
+data.json
+locations.json
+
+# System
+.DS_Store
+Thumbs.db
+node_modules/
+*.log
+.claude/
+start.bat
