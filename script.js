@@ -615,59 +615,46 @@ fileInput.addEventListener('change', async () => {
 
 // ── Drag & Drop to location sections ──
 
-let dragCounter = 0;
 let dragTargetSection = null;
 
-scrollContainer.addEventListener('dragenter', (e) => {
-  e.preventDefault();
-  dragCounter++;
-});
+function clearDragHighlight() {
+  if (dragTargetSection) {
+    const photoArea = dragTargetSection.querySelector('.photo-area');
+    if (photoArea) photoArea.classList.remove('drag-over');
+  }
+  dragTargetSection = null;
+}
 
 scrollContainer.addEventListener('dragover', (e) => {
   e.preventDefault();
   if (!e.dataTransfer) return;
   e.dataTransfer.dropEffect = 'copy';
 
-  // Find which location section the cursor is over
   const section = e.target.closest('.location-section');
   const locName = section?.dataset.location;
   if (!locName) return;
 
   if (dragTargetSection !== section) {
-    // Remove highlight from previous
-    if (dragTargetSection) {
-      const prevArea = dragTargetSection.querySelector('.photo-area');
-      if (prevArea) prevArea.classList.remove('drag-over');
-    }
-    // Highlight new target
+    clearDragHighlight();
     dragTargetSection = section;
     const photoArea = section.querySelector('.photo-area');
     if (photoArea) photoArea.classList.add('drag-over');
   }
 });
 
-scrollContainer.addEventListener('dragleave', () => {
-  dragCounter--;
-  if (dragCounter <= 0) {
-    dragCounter = 0;
-    if (dragTargetSection) {
-      const photoArea = dragTargetSection.querySelector('.photo-area');
-      if (photoArea) photoArea.classList.remove('drag-over');
-    }
-    dragTargetSection = null;
+scrollContainer.addEventListener('dragleave', (e) => {
+  // Only clear when actually leaving the container, not entering a child
+  if (!scrollContainer.contains(e.relatedTarget)) {
+    clearDragHighlight();
   }
 });
 
 scrollContainer.addEventListener('drop', async (e) => {
   e.preventDefault();
-  dragCounter = 0;
-  if (dragTargetSection) {
-    const photoArea = dragTargetSection.querySelector('.photo-area');
-    if (photoArea) photoArea.classList.remove('drag-over');
-  }
+  const targetSection = dragTargetSection;
+  clearDragHighlight();
 
-  const locName = dragTargetSection?.dataset.location;
-  dragTargetSection = null;
+  const locName = targetSection?.dataset.location;
   if (!locName) return;
 
   const files = e.dataTransfer?.files;
@@ -675,6 +662,11 @@ scrollContainer.addEventListener('drop', async (e) => {
 
   const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
   if (imageFiles.length) await uploadFiles(locName, imageFiles);
+});
+
+// Cleanup if drag is cancelled (e.g. Esc key)
+document.addEventListener('dragend', () => {
+  clearDragHighlight();
 });
 
 // ============================================================
