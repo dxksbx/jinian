@@ -138,10 +138,11 @@ function listLocations(res) {
 }
 
 function createLocation(req, res) {
-  let body = '';
-  req.on('data', chunk => { body += chunk; });
-  req.on('end', () => {
+  let chunks = [];
+  req.on('data', chunk => chunks.push(chunk));
+  req.on('end', async () => {
     try {
+      const body = Buffer.concat(chunks).toString('utf8');
       const data = JSON.parse(body);
       const { name, coverData, description } = data;
       const locName = (name || '').trim();
@@ -155,7 +156,7 @@ function createLocation(req, res) {
         if (!match) return json(res, 400, { error: 'Invalid cover' });
         const ext = match[1].includes('png') ? '.png' : '.jpg';
         coverFilename = 'cover_' + locName.replace(/[\\/:*?"<>|]/g, '_') + '_' + Date.now() + ext;
-        fs.writeFileSync(path.join(COVERS_DIR, coverFilename), Buffer.from(match[2], 'base64'));
+        await fs.promises.writeFile(path.join(COVERS_DIR, coverFilename), Buffer.from(match[2], 'base64'));
       }
 
       locations[locName] = { name: locName, coverImage: coverFilename, description: (description || ''), createdAt: new Date().toISOString() };

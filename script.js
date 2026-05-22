@@ -682,6 +682,30 @@ scrollContainer.addEventListener('drop', async (e) => {
 // ============================================================
 
 let coverFile = null;
+let coverDataUrl = '';
+
+function resizeCover(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 1200;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else       { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('加载封面失败')); };
+    img.src = url;
+  });
+}
 
 $('#createLocationBtn').addEventListener('click', () => {
   $('#newLocationName').value = '';
@@ -690,6 +714,7 @@ $('#createLocationBtn').addEventListener('click', () => {
   const img = $('#coverDrop').querySelector('.cover-drop-img');
   if (img) img.remove();
   coverFile = null;
+  coverDataUrl = '';
   createLocationModal.classList.add('open');
 });
 
@@ -717,37 +742,29 @@ coverInput.addEventListener('change', () => {
   if (file) handleCoverFile(file);
 });
 
-function handleCoverFile(file) {
+async function handleCoverFile(file) {
   coverFile = file;
-  const reader = new FileReader();
-  reader.onload = () => {
+  try {
+    coverDataUrl = await resizeCover(file);
     let img = coverDrop.querySelector('.cover-drop-img');
     if (!img) { img = document.createElement('img'); img.className = 'cover-drop-img'; coverDrop.appendChild(img); }
-    img.src = reader.result;
+    img.src = coverDataUrl;
     coverDrop.classList.add('has-image');
-  };
-  reader.readAsDataURL(file);
+  } catch (e) {
+    console.error(e);
+    toastMsg('封面加载失败');
+  }
 }
 
 $('#btnSaveCreate').addEventListener('click', async () => {
   const name = $('#newLocationName').value.trim();
   if (!name) { toastMsg('请输入地点名称'); return; }
 
-  let coverData = '';
-  if (coverFile) {
-    coverData = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('读取封面失败'));
-      reader.readAsDataURL(coverFile);
-    });
-  }
-
   try {
     const res = await fetch('/api/locations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, coverData }),
+      body: JSON.stringify({ name, coverData: coverDataUrl }),
     });
     const result = await res.json();
     if (res.status === 409) { toastMsg('地点已存在'); return; }
